@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interpretability Methods Taxonomy</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        #tree-container {
+            width: 100%;
+            max-width: 950px;
+            height: 550px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .node {
+            cursor: pointer;
+        }
+        .node circle {
+            stroke: #e74c3c;
+            stroke-width: 2.5px;
+            transition: all 0.3s ease;
+        }
+        .node circle:hover {
+            stroke: #c0392b;
+            stroke-width: 3.5px;
+        }
+        .node text {
+            font: 14px sans-serif;
+            fill: #333;
+        }
+        .link {
+            fill: none;
+            stroke: #bdc3c7;
+            stroke-width: 2px;
+        }
+        #info-panel {
+            width: 100%;
+            max-width: 910px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 5px solid #e74c3c;
+            min-height: 100px;
+        }
+        #info-title {
+            margin-top: 0;
+            color: #c0392b;
+        }
+        #info-desc {
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Interactive Taxonomy of Interpretability Methods</h2>
+    <div id="tree-container">
+        <p id="loading-text" style="color: #7f8c8d;">Loading visualization...</p>
+    </div>
+    
+    <div id="info-panel">
+        <h3 id="info-title">Welcome</h3>
+        <p id="info-desc">Click on the nodes in the diagram to expand or collapse branches. This interactive explorer supplements the unified classification framework presented in our paper.</p>
+    </div>
+
+    <script>
+        // The Error Catcher - This will tell us if it breaks!
+        try {
+            if (typeof d3 === 'undefined') {
+                throw new Error("The D3.js library was blocked from loading. Please check your internet connection or disable strict tracking protection/ad-blockers for this local file.");
+            }
+
+            const treeData = {
+                name: "Interpretability Methods",
+                description: "The root classification framework for rendering tree-based ensembles transparent.",
+                children: [
+                    {
+                        name: "Post-hoc",
+                        description: "Techniques applied after an opaque model has been trained to extract explanations.",
+                        children: [
+                            { name: "Extracted Rules", description: "Algorithmically distilling decision paths into logical rule sets." },
+                            {
+                                name: "Surrogate Models",
+                                description: "Training a secondary, interpretable model to mimic the complex ensemble.",
+                                children: [
+                                    { name: "Tree", description: "Approximating the ensemble using a single decision tree." },
+                                    { name: "Non-tree", description: "Approximating using linear models or alternative structures." }
+                                ]
+                            },
+                            { name: "Regularization Based", description: "Applying mathematical constraints to simplify decision boundaries post-training." },
+                            {
+                                name: "Modular",
+                                description: "Decomposing the feature space to apply localized explanations.",
+                                children: [
+                                    { name: "Tree", description: "Using localized decision trees for specific sub-regions." },
+                                    { name: "Non-tree", description: "Using alternative localized estimators for sub-regions." }
+                                ]
+                            },
+                            {
+                                name: "Visualization Oriented",
+                                description: "Translating structural topology into visual abstractions.",
+                                children: [
+                                    { name: "Rule-based", description: "Visualizing the topology of extracted rules." },
+                                    { name: "Feature-based", description: "Visualizing feature contributions via heatmaps or attributions." },
+                                    { name: "Point-based", description: "Explaining predictions through representative data prototypes." }
+                                ]
+                            },
+                            { name: "Counterfactuals", description: "Identifying minimum necessary changes to alter the model's output." }
+                        ]
+                    },
+                    {
+                        name: "Inherent",
+                        description: "Architectures designed to be transparent by nature, shifting focus to ante-hoc design.",
+                        children: [
+                            { name: "Aggregational", description: "Summarizing or fusing the tree ensemble directly without secondary surrogate models." },
+                            {
+                                name: "Modular",
+                                description: "Building inherently interpretable sub-models optimized for different data regions.",
+                                children: [
+                                    { name: "Tree", description: "Using inherent local decision trees." },
+                                    { name: "Non-tree", description: "Using inherent non-tree local models." }
+                                ]
+                            },
+                            { name: "Distributional", description: "Providing inherently transparent, probabilistic, or distributional outputs." }
+                        ]
+                    }
+                ]
+            };
+
+            // Clear the loading text
+            document.getElementById("tree-container").innerHTML = "";
+
+            const margin = {top: 20, right: 150, bottom: 20, left: 180},
+                  width = 950 - margin.left - margin.right,
+                  height = 550 - margin.top - margin.bottom;
+
+            const svg = d3.select("#tree-container").append("svg")
+                .attr("width", width + margin.right + margin.left)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            let i = 0;
+            const root = d3.hierarchy(treeData, d => d.children);
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+            const treeMap = d3.tree().size([height, width]);
+
+            root.children.forEach(collapse);
+            update(root);
+
+            function collapse(d) {
+                if(d.children) {
+                    d._children = d.children;
+                    d._children.forEach(collapse);
+                    d.children = null;
+                }
+            }
+            
+            function getNodeColor(d) {
+                if (d._children) return "#e74c3c"; // Collapsed -> Solid Red
+                if (d.children) return "#fff";     // Expanded -> White
+                return "#ecf0f1";                  // Leaf node -> Light Grey
+            }
+
+            function update(source) {
+                const treeInfo = treeMap(root);
+                const nodes = treeInfo.descendants(),
+                      links = treeInfo.descendants().slice(1);
+
+                nodes.forEach(d => d.y = d.depth * 200);
+
+                const node = svg.selectAll('g.node')
+                    .data(nodes, d => d.id || (d.id = ++i));
+
+                const nodeEnter = node.enter().append('g')
+                    .attr('class', 'node')
+                    .attr("transform", d => "translate(" + source.y0 + "," + source.x0 + ")")
+                    .on('click', click);
+
+                nodeEnter.append('circle')
+                    .attr('r', 1e-6)
+                    .style("fill", getNodeColor);
+
+                nodeEnter.append('text')
+                    .attr("dy", ".35em")
+                    .attr("x", d => d.children || d._children ? -13 : 13)
+                    .attr("text-anchor", d => d.children || d._children ? "end" : "start")
+                    .text(d => d.data.name);
+
+                const nodeUpdate = nodeEnter.merge(node);
+                nodeUpdate.transition().duration(400)
+                    .attr("transform", d => "translate(" + d.y + "," + d.x + ")");
+
+                nodeUpdate.select('circle')
+                    .attr('r', 8)
+                    .style("fill", getNodeColor)
+                    .attr('cursor', 'pointer');
+
+                const nodeExit = node.exit().transition().duration(400)
+                    .attr("transform", d => "translate(" + source.y + "," + source.x + ")")
+                    .remove();
+
+                nodeExit.select('circle').attr('r', 1e-6);
+                nodeExit.select('text').style('fill-opacity', 1e-6);
+
+                const link = svg.selectAll('path.link')
+                    .data(links, d => d.id);
+
+                const linkEnter = link.enter().insert('path', "g")
+                    .attr("class", "link")
+                    .attr('d', d => {
+                        const o = {x: source.x0, y: source.y0};
+                        return diagonal(o, o);
+                    });
+
+                const linkUpdate = linkEnter.merge(link);
+                linkUpdate.transition().duration(400)
+                    .attr('d', d => diagonal(d, d.parent));
+
+                link.exit().transition().duration(400)
+                    .attr('d', d => {
+                        const o = {x: source.x, y: source.y};
+                        return diagonal(o, o);
+                    })
+                    .remove();
+
+                nodes.forEach(d => {
+                    d.x0 = d.x;
+                    d.y0 = d.y;
+                });
+
+                function diagonal(s, d) {
+                    return `M ${s.y} ${s.x}
+                            C ${(s.y + d.y) / 2} ${s.x},
+                              ${(s.y + d.y) / 2} ${d.x},
+                              ${d.y} ${d.x}`;
+                }
+            }
+
+            function click(event, d) {
+                document.getElementById("info-title").innerText = d.data.name;
+                document.getElementById("info-desc").innerText = d.data.description || "Sub-category exploring specific methodologies within the parent domain.";
+
+                if (d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                } else {
+                    d.children = d._children;
+                    d._children = null;
+                }
+                update(d);
+            }
+        } catch (error) {
+            // Print the exact error on the screen
+            document.getElementById("tree-container").innerHTML = 
+                "<div style='text-align: center; color: #c0392b; padding: 20px;'>" +
+                "<h3>Visualization Error</h3>" +
+                "<p>" + error.message + "</p>" +
+                "</div>";
+        }
+    </script>
+</body>
+</html>
